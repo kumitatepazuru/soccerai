@@ -14,6 +14,7 @@ class Actor:
 
     def __init__(self, env):
         self.actions = list(range(len(env)))
+        # ballの距離・ballの角度・actionの種類すべてが格納されていて、対応するindexがActor.policyで選ばれる。
         self.Q = np.random.uniform(0, 1, (
             ((env.max_ball_distance - env.min_ball_distance) * 10) + 1,
             ((env.max_ball_angle - env.min_ball_angle) * 2 * 10) + 1, len(env)))
@@ -27,6 +28,7 @@ class Actor:
 class Critic:
 
     def __init__(self, env):
+        # self.Qとほぼ同じ
         self.V = np.zeros((((env.max_ball_distance - env.min_ball_distance) * 10) + 1) * (
                 ((env.max_ball_angle - env.min_ball_angle) * 10) + 1) * len(env))
 
@@ -37,6 +39,7 @@ class ActorCritic:
         self.critic_class = critic_class
 
     def train(self, name,env, gamma=0.9, learning_rate=0.1):
+        # Actor Critic法の実装
         actor = self.actor_class(env)
         critic = self.critic_class(env)
         s = env.reset(name)
@@ -57,6 +60,7 @@ class ActorCritic:
 
 def train():
     time.sleep(1)
+    # スレッド化して実行
     trainer = ActorCritic(Actor, Critic)
     for i in range(11):
         env = env_data.env()
