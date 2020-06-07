@@ -1,5 +1,5 @@
+import sys
 import threading
-import time
 
 import numpy as np
 
@@ -10,13 +10,24 @@ def softmax(x):
     return np.exp(x) / np.sum(np.exp(x), axis=0)
 
 
+def readable_size(size):
+    for unit in ['K','M']:
+        if abs(size) < 1024.0:
+            return "%.1f%sB" % (size,unit)
+        size /= 1024.0
+    size /= 1024.0
+    return "%.1f%s" % (size,'GB')
+
+
 class Actor:
 
     def __init__(self, env):
         self.actions = list(range(len(env)))
+        # ballの距離・ballの角度・actionの種類すべてが格納されていて、対応するindexがActor.policyで選ばれる。
         self.Q = np.random.uniform(0, 1, (
-            ((env.max_ball_distance - env.min_ball_distance) * 10) + 1,
-            ((env.max_ball_angle - env.min_ball_angle) * 2 * 10) + 1, len(env)))
+            (env.max_ball_distance - env.min_ball_distance) + 1,
+            (env.max_ball_angle - env.min_ball_angle) + 1, len(env)))
+        print("Q table:"+readable_size(sys.getsizeof(self.Q)))
 
     def policy(self, ball_distance, ball_angle):
         a = np.random.choice(self.actions, 1,
@@ -27,8 +38,10 @@ class Actor:
 class Critic:
 
     def __init__(self, env):
-        self.V = np.zeros((((env.max_ball_distance - env.min_ball_distance) * 10) + 1) * (
-                ((env.max_ball_angle - env.min_ball_angle) * 10) + 1) * len(env))
+        # self.Qとほぼ同じ
+        self.V = np.zeros(((env.max_ball_distance - env.min_ball_distance) + 1) * (
+                (env.max_ball_angle - env.min_ball_angle) + 1) * len(env))
+        print("V table:" + readable_size(sys.getsizeof(self.V)))
 
 
 class ActorCritic:
@@ -36,13 +49,14 @@ class ActorCritic:
         self.actor_class = actor_class
         self.critic_class = critic_class
 
-    def train(self, name,env, gamma=0.9, learning_rate=0.1):
+    def train(self, name, env, gamma=0.9, learning_rate=0.1):
+        # Actor Critic法の実装
         actor = self.actor_class(env)
         critic = self.critic_class(env)
         s = env.reset(name)
         done = False
         while not done:
-            a = actor.policy(s[0],s[1])
+            a = actor.policy(s[0], s[1])
             n_state, reward, done = env.step(a)
 
             gain = reward + gamma * critic.V[n_state[0] * n_state[1]]
@@ -56,7 +70,7 @@ class ActorCritic:
 
 
 def train():
-    time.sleep(1)
+    # スレッド化して実行
     trainer = ActorCritic(Actor, Critic)
     for i in range(11):
         env = env_data.env()
