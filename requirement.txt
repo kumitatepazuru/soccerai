@@ -1,0 +1,4 @@
+numpy
+matplotlib
+sexpdata
+tensorflow<2.0.0

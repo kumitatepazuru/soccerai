@@ -1,5 +1,18 @@
-import json
 from socket import socket, AF_INET, SOCK_DGRAM
+from sexpdata import Symbol, loads
+
+
+def func(text):
+    if type(text) == Symbol:
+        return text.value()
+    elif type(text) == list:
+        return tostring(text)
+    else:
+        return str(text)
+
+
+def tostring(text):
+    return list(map(func, text))
 
 
 class player_signal:
@@ -22,7 +35,7 @@ class player_signal:
         self.analysis_log = analysis_log
         self.no = ""
         self.player_port = 0
-        self.error = {"no more player or goalie or illegal client version": 0,"unknown command": 1}
+        self.error = {"no more player or goalie or illegal client version": 0, "unknown command": 1}
 
     def __del__(self):
         self.s.close()
@@ -69,17 +82,28 @@ class player_signal:
 
     def recieve_msg(self, log=None):
         msg, address = self.s.recvfrom(8192)
-        if log is None:
-            log = self.recieve_log
-        if log:
-            print("\033[38;5;12m[INFO]" + (
-                    "\033[38;5;13mno \033[4m" + self.no + "\033[0m ") * (
-                          self.no != "") + "\t\033[0m\033[38;5;10mGet msg.\t\033[38;5;9mPORT \033[4m" + str(
-                self.recieve_port) + "\033[0m\033[38;5;9m ← \033[4m" +
-                  str(address[1]) + "\033[0m\t\033[38;5;6mIP \033[4m" + address[0] + "\033[0m")
-        return json.loads(msg[:-1].decode("utf-8").replace("  ", " ").replace("(", '["').replace(")", '"]').
-                          replace(" ", '","').replace('"[', "[").replace(']"', "]").replace("][", "],[").
-                          replace('""', '"')), address
+        msg = tostring(loads(msg[:-1].decode("utf-8")))
+        if msg[0] == "think":
+            if log is None:
+                log = self.recieve_log
+            if log:
+                print("\033[38;5;12m[INFO]" + (
+                        "\033[38;5;13mno \033[4m" + self.no + "\033[0m ") * (
+                              self.no != "") + "\t\033[0m\033[38;5;10mGet \033[4mthink\033[0m msg.\t\033[38;5;9mPORT "
+                                               "\033[4m" + str(self.recieve_port) + "\033[0m\033[38;5;9m ← \033[4m" +
+                      str(address[1]) + "\033[0m\t\033[38;5;6mIP \033[4m" + address[0] + "\033[0m")
+            self.send_msg("(done)",self.player_port)
+            return self.recieve_msg(log)
+        else:
+            if log is None:
+                log = self.recieve_log
+            if log:
+                print("\033[38;5;12m[INFO]" + (
+                        "\033[38;5;13mno \033[4m" + self.no + "\033[0m ") * (
+                              self.no != "") + "\t\033[0m\033[38;5;10mGet msg.\t\033[38;5;9mPORT \033[4m" + str(
+                    self.recieve_port) + "\033[0m\033[38;5;9m ← \033[4m" +
+                      str(address[1]) + "\033[0m\t\033[38;5;6mIP \033[4m" + address[0] + "\033[0m")
+            return msg, address
 
     def msg_analysis(self, text, log_show=None):
         text = text[0]
@@ -94,7 +118,7 @@ class player_signal:
             log = "\033[38;5;10m[OK]" + (
                     "\033[38;5;13mno \033[4m" + self.no + "\033[0m ") * (
                           self.no != "") + "\t\033[38;5;10minit msg.\t\033[4m" + "\033[38;5;11mleft team" * (
-                              text[1] == "l") + \
+                          text[1] == "l") + \
                   "\033[38;5;1mright team" * (text[1] == "r") + "\033[0m\033[38;5;6m no \033[4m" + text[2] + "\033[0m"
             r = {"type": "init", "value": text[:-2]}
         elif text[0] == "server_param" or text[0] == "player_param" or text[0] == "player_type":
@@ -111,7 +135,7 @@ class player_signal:
         elif text[0] == "hear":
             log = "\033[38;5;12m[INFO]" + (
                     "\033[38;5;13mno \033[4m" + self.no + "\033[0m ") * (
-                          self.no != "") + "\t\033[38;5;10mhear msg. \033[38;5;9mtime \033[4m" + text[1] + "\033[0m " + \
+                          self.no != "") + "\t\033[38;5;10mhear msg. \033[38;5;9mtime \033[4m" + text[1] + "\033[0m " +\
                   "\033[38;5;6mspeaker \033[4m" + text[2] + "\033[0m " + "\033[38;5;13mcontents \033[4m" + text[3] + \
                   "\033[0m"
             r = {"type": "hear", "time": int(text[1]), "speaker": text[2], "contents": text[3]}
