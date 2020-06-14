@@ -42,7 +42,7 @@ class env(libscips.player.player_signal):
                  max_ball_angle=100, min_ball_angle=-100, ball_angle_interval=40,
                  max_goal_distance=55, min_goal_distance=5, goal_distance_interval=10,
                  max_goal_angle=100, min_goal_angle=-100, goal_angle_interval=50,
-                 report_interval=1500, noise=0.5, num=11, actions=6, up_reward=1):
+                 report_interval=1500, noise=0.5, num=11, actions=6):
         # 初期設定
         super().__init__(ADDRESS, HOST, send_log, recieve_log, analysis_log)
         self.logger1 = TensorBoardLogger(log_dir='./logdir/reward')
@@ -67,7 +67,7 @@ class env(libscips.player.player_signal):
         self.special_division_value = special_division_value
         self.damage_reset_ball_distance = damage_reset_ball_distance
         self.noise = noise
-        self.up_reward=up_reward
+        self.up_reward = 0
         self.actions = actions
         self.kickcount = 0
         self.ball_damage = 0
