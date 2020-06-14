@@ -1,5 +1,4 @@
 import random
-import time
 
 import libscips.player
 import numpy as np
@@ -71,7 +70,6 @@ class env(libscips.player.player_signal):
         self.actions = actions
         self.kickcount = 0
         self.ball_damage = 0
-        self.tmp = time.time()
         self.num = num
         self.turn_repeat = [0, 0]
         self.team = None
