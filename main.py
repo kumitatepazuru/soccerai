@@ -70,7 +70,7 @@ class ActorCritic:
         self.critic_class = critic_class
         self.save = 0
 
-    def train(self, name, env, data=None, logging=False, gamma=0.9, learning_rate=0.1, save_interval=25000):
+    def train(self, name, env, data=None, logging=False, gamma=0.95, learning_rate=0.1, save_interval=25000):
         # Actor Critic法の実装
         if data is not None:
             actor = self.actor_class(env, data["arr_0"])
