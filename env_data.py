@@ -68,6 +68,7 @@ class env(libscips.player.player_signal):
         self.damage_reset_ball_distance = damage_reset_ball_distance
         self.noise = noise
         self.ball_distance = 0
+        self.goal_distance = 0
         self.actions = actions
         self.kickcount = 0
         self.ball_damage = 0
@@ -76,7 +77,7 @@ class env(libscips.player.player_signal):
         self.enemy = None
         self.time = 0
         self.goal = 0
-        self.turn_repeat = [0,0]
+        self.turn_repeat = [0, 0]
         self.goal_reset = goal_reset
 
     def __len__(self):
@@ -139,7 +140,7 @@ class env(libscips.player.player_signal):
         reward = 0
         reward_see = 0
         reward_action = 0
-        self.ball_damage += (12 - self.num) * 0.1
+        self.ball_damage += (12 - self.num) * 1.5
         if random.random() < self.noise:
             end_action = action
         else:
@@ -147,7 +148,7 @@ class env(libscips.player.player_signal):
             end_action = action
         if action == 0:
             self.send_dash(100)
-            reward_action -= self.repeat(1,out=20)
+            reward_action -= self.repeat(1, out=20)
         elif action == 1:
             self.send_turn(10)
             reward_action -= self.repeat(1)
@@ -175,19 +176,27 @@ class env(libscips.player.player_signal):
                 # ゴールしたときの報酬（できたらめっちゃ褒める）
                 if rec["contents"][:6] == "goal_" + self.team:
                     self.send_move(-10, -10)
-                    self.ball_damage = -1000
+                    self.ball_damage = -1000 * int(rec["contents"][7:])
                     reward_action += 1000 * int(rec["contents"][7:])
                     self.goal += 1
                     print("GOAL!", int(rec["contents"][7:]), "time:", rec["time"])
             elif rec["type"] == "sense_body":
                 if self.kickcount < int(rec["value"][4][1]):
-                    self.ball_damage -= self.ball_damage/5
+                    self.ball_damage -= (1000 + self.ball_damage) / 5
                     reward_action += 100
                     print("kick!!!!", reward_action, "time:", rec["time"])
                     self.kickcount = int(rec["value"][4][1])
 
         ball_info = self.see_analysis(rec_raw, "b")
         goal_info = self.see_analysis(rec_raw, ["g", self.enemy])
+
+        # ゴールが見えているか
+        if goal_info is None:
+            goal_info = [self.max_goal_distance + 1, self.max_goal_angle + 1]
+        else:
+            goal_info = list(map(lambda n: float(n), goal_info))
+            if goal_info[0] > self.max_goal_distance:
+                goal_info = [self.max_goal_distance, goal_info[1]]
 
         # ボールが見えてるか
         if ball_info is None:
@@ -197,19 +206,15 @@ class env(libscips.player.player_signal):
             if ball_info[0] > self.max_ball_distance:
                 ball_info = [self.max_ball_distance, ball_info[1]]
             elif ball_info[0] < 15:
-                self.ball_damage -= self.ball_damage/200
-            # もし近づいたら報酬をもらう
-            if self.ball_distance > ball_info[0]:
-                reward_see += 200
+                self.ball_damage -= (1000 + self.ball_damage) / 100
             self.ball_distance = ball_info[0]
 
-        # ゴールが見えているか
-        if goal_info is None:
-            goal_info = [self.max_goal_distance + 1, self.max_goal_angle + 1]
-        else:
-            goal_info = list(map(lambda n: float(n), goal_info))
-            if goal_info[0] > self.max_goal_distance:
-                goal_info = [self.max_goal_distance, goal_info[1]]
+        if self.goal_distance > goal_info[0]:
+            reward_see += 200
+            if self.ball_distance > ball_info[0]:
+                reward_see += 100
+        self.goal_distance = goal_info[0]
+        self.ball_distance = ball_info[0]
 
         # ログの追加
         reward += reward_see + reward_action - self.ball_damage
