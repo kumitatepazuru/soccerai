@@ -34,23 +34,21 @@ class TensorBoardLogger(object):
 
 
 class env(libscips.player.player_signal):
-    def __init__(self, ADDRESS="127.0.0.1", HOST="", send_log=False, recieve_log=False,
-                 analysis_log=("unknown", "init", "error"),
-                 max_ball_distance=40, min_ball_distance=0, ball_distance_interval=10, special_division=True,
-                 special_division_value=1, damage_reset_ball_distance=5,
-                 max_ball_angle=100, min_ball_angle=-100, ball_angle_interval=40,
-                 max_goal_distance=55, min_goal_distance=5, goal_distance_interval=10,
-                 max_goal_angle=100, min_goal_angle=-100, goal_angle_interval=50,
-                 report_interval=1500, noise=0.5, num=11, actions=6, goal_reset=10000):
+    def __init__(self, ADDRESS, HOST, SERVER_PORT, send_log, recieve_log, analysis_log, logdir,
+                 max_ball_distance, min_ball_distance, ball_distance_interval, special_division,
+                 special_division_value, damage_reset_ball_distance,
+                 max_ball_angle, min_ball_angle, ball_angle_interval,
+                 max_goal_distance, min_goal_distance, goal_distance_interval,
+                 max_goal_angle, min_goal_angle, goal_angle_interval,
+                 num, noise, actions, goal_reset):
         # 初期設定
-        super().__init__(ADDRESS, HOST, send_log, recieve_log, analysis_log)
-        self.logger1 = TensorBoardLogger(log_dir='./logdir/reward')
-        self.logger2 = TensorBoardLogger(log_dir='./logdir/see')
-        self.logger3 = TensorBoardLogger(log_dir='./logdir/action')
-        self.logger4 = TensorBoardLogger(log_dir='./logdir/damage')
-        self.logger5 = TensorBoardLogger(log_dir='./logdir/goal')
+        super().__init__(ADDRESS, HOST, SERVER_PORT, send_log, recieve_log, analysis_log)
+        self.logger1 = TensorBoardLogger(log_dir='./'+logdir+'/reward')
+        self.logger2 = TensorBoardLogger(log_dir='./'+logdir+'/see')
+        self.logger3 = TensorBoardLogger(log_dir='./'+logdir+'/action')
+        self.logger4 = TensorBoardLogger(log_dir='./'+logdir+'/damage')
+        self.logger5 = TensorBoardLogger(log_dir='./'+logdir+'/goal')
 
-        self.report_interval = report_interval
         self.max_ball_distance = max_ball_distance
         self.min_ball_distance = min_ball_distance
         self.ball_distance_interval = ball_distance_interval
@@ -67,6 +65,7 @@ class env(libscips.player.player_signal):
         self.special_division_value = special_division_value
         self.damage_reset_ball_distance = damage_reset_ball_distance
         self.noise = noise
+        self.noise_num = 0
         self.ball_distance = 0
         self.goal_distance = 0
         self.actions = actions
@@ -77,6 +76,7 @@ class env(libscips.player.player_signal):
         self.enemy = None
         self.time = 0
         self.goal = 0
+        self.reset_kick = self.kickcount
         self.turn_repeat = [0, 0]
         self.goal_reset = goal_reset
 
@@ -140,7 +140,7 @@ class env(libscips.player.player_signal):
         reward = 0
         reward_see = 0
         reward_action = 0
-        self.ball_damage += (12 - self.num) * 1.5
+        self.ball_damage += (12 - self.num) * 0.1
         if random.random() < self.noise:
             end_action = action
         else:
@@ -178,6 +178,10 @@ class env(libscips.player.player_signal):
                     self.send_move(-10, -10)
                     self.ball_damage = -1000 * int(rec["contents"][7:])
                     reward_action += 1000 * int(rec["contents"][7:])
+                    if int(rec["contents"][7:]) == 1:
+                        self.noise_num = 2
+                    elif int(rec["contents"][7:]) == 10:
+                        self.noise_num = 3
                     self.goal += 1
                     print("GOAL!", int(rec["contents"][7:]), "time:", rec["time"])
             elif rec["type"] == "sense_body":
@@ -185,6 +189,8 @@ class env(libscips.player.player_signal):
                     self.ball_damage -= (1000 + self.ball_damage) / 5
                     reward_action += 100
                     print("kick!!!!", reward_action, "time:", rec["time"])
+                    if self.kickcount == 0:
+                        self.noise_num = 1
                     self.kickcount = int(rec["value"][4][1])
 
         ball_info = self.see_analysis(rec_raw, "b")
@@ -205,14 +211,15 @@ class env(libscips.player.player_signal):
             ball_info = list(map(lambda n: float(n), ball_info))
             if ball_info[0] > self.max_ball_distance:
                 ball_info = [self.max_ball_distance, ball_info[1]]
-            elif ball_info[0] < 15:
-                self.ball_damage -= (1000 + self.ball_damage) / 100
+            elif ball_info[0] < 5:
+                self.ball_damage -= (1000 + self.ball_damage) / 20
             self.ball_distance = ball_info[0]
 
         if self.goal_distance > goal_info[0]:
             reward_see += 200
             if self.ball_distance > ball_info[0]:
-                reward_see += 100
+                reward_see *= 2.5
+                self.ball_damage -= (1000 + self.ball_damage) / 30
         self.goal_distance = goal_info[0]
         self.ball_distance = ball_info[0]
 

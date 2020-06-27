@@ -16,8 +16,8 @@ def tostring(text):
 
 
 class player_signal:
-    def __init__(self, ADDRESS="127.0.0.1", HOST="", send_log=False, recieve_log=False, analysis_log=("unknown",
-                                                                                                      "init", "error")):
+    def __init__(self, ADDRESS="127.0.0.1", HOST="", SERVER_PORT=6000, send_log=False, recieve_log=False,
+                 analysis_log=("unknown","init", "error")):
         self.ADDRESS = ADDRESS
         self.s = socket(AF_INET, SOCK_DGRAM)
         ok = 0
@@ -34,13 +34,16 @@ class player_signal:
         self.send_log = send_log
         self.analysis_log = analysis_log
         self.no = ""
+        self.SERVER_PORT = SERVER_PORT
         self.player_port = 0
         self.error = {"no more player or goalie or illegal client version": 0, "unknown command": 1}
 
     def __del__(self):
         self.s.close()
 
-    def send_msg(self, text, PORT=6000, log=None):
+    def send_msg(self, text, PORT=None, log=None):
+        if PORT is None:
+            PORT = self.SERVER_PORT
         self.s.sendto((text + "\0").encode(), (self.ADDRESS, PORT))
         self.send_logging(text, PORT, log=log)
 
