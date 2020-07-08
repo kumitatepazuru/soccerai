@@ -80,7 +80,7 @@ def args():
                                                  "it is rounded up to the minimum value.", default=-100, type=int)
     parser.add_argument("--goal_angle_interval", help="The angle specifies how ambiguous the relative angle "
                                                       "of the goal is to be learned.", default=50, type=int)
-    parser.add_argument("--noise", help="How much of the actions given by the AI will be used", default=0.5, type=float)
+    parser.add_argument("--noise", help="How much of the actions given by the AI will be used", default=0.8, type=float)
     parser.add_argument("--actions", help="Specify the number of actions", default=6, type=int)
     parser.add_argument("--goal_reset", help="Specify the specific episode in the graph that shows the number of times "
                                              "a goal is scored within a specific episode displayed on tensorboard.",

@@ -64,7 +64,7 @@ class Critic:
                                           (
                                                   env.max_ball_angle - env.min_ball_angle) / env.ball_angle_interval + 1) * int(
                 (env.max_goal_distance - env.min_goal_distance) / env.goal_distance_interval + 1) * int(
-                (env.max_goal_angle - env.min_goal_angle) / env.goal_angle_interval + 1) * len(env)))
+                (env.max_goal_angle - env.min_goal_angle) / env.goal_angle_interval + 1)))
         else:
             self.V = V
         print("V table:" + readable_size(sys.getsizeof(self.V)))
