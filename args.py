@@ -19,6 +19,8 @@ def args():
     parser.add_argument("-s", "--auto_server", help="Auto-start the server.", action='store_true')
     parser.add_argument("-w", "--auto_window", help="Auto-start soccerwindow2 (must be installed beforehand).",
                         action='store_true')
+    parser.add_argument("-b", "--auto_browser", help="Auto-start firefox (must be installed beforehand).",
+                        action='store_true')
     parser.add_argument("team_name_1", help="Specify a team name for Team 1")
     parser.add_argument("team_name_2", help="Specify a team name for Team 2")
     parser.add_argument("--gamma", help="Specifies the gamma of the ActorCritic.train function", default=0.95,

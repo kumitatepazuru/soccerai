@@ -10,6 +10,8 @@ import numpy as np
 
 import env_data
 
+args = args.args()
+
 
 def softmax(x):
     # 入力値の中で最大値を取得
@@ -170,12 +172,15 @@ def train(arguments, ip=0):
 
 
 if __name__ == "__main__":
-    args = args.args()
     try:
         shutil.rmtree("./" + args.logdir)
     except FileNotFoundError:
         pass
-    tensorboard = subprocess.Popen(["tensorboard", "--logdir", "./" + args.logdir, "--port", "0"])
+    s = socket(AF_INET, SOCK_DGRAM)
+    s.bind((args.host, 0))
+    p = s.getsockname()[1]
+    s.close()
+    tensorboard = subprocess.Popen(["tensorboard", "--logdir", "./" + args.logdir, "--port", str(p)])
     if args.auto_server:
         if args.auto_ip:
             print("\033[38;5;12m[INFO]\t\033[38;5;13mSearching for available ports ...\033[0m")
@@ -191,7 +196,7 @@ if __name__ == "__main__":
             s.bind((args.host, 0))
             p3 = s.getsockname()[1]
             s.close()
-            print("\033[38;5;10m[OK] server port:", p1, p2, p3)
+            print("\033[38;5;10m[OK] server port:", p1, p2, p3,"\033[0m")
 
             server = subprocess.Popen(
                 ["rcssserver",
@@ -205,8 +210,8 @@ if __name__ == "__main__":
                  "server::connect_wait=25", "server::kick_off_wait=10", "server::game_over_wait=10"])
         else:
             server = subprocess.Popen(
-                ["rcssserver",
-                 "server::game_logging=false", "server::text_logging=false", "server::nr_normal_halfs=1",
+                ["rcssserver", "server::max_goal_kicks=false"
+                               "server::game_logging=false", "server::text_logging=false", "server::nr_normal_halfs=1",
                  "server::use_offside=off",
                  "server::synch_mode=true", "server::free_kick_faults=false", "server::forbid_kick_off_offside=false",
                  "server::penalty_shoot_outs=false", "server::half_time=-1",
@@ -221,6 +226,8 @@ if __name__ == "__main__":
             window = subprocess.Popen(["soccerwindow2", "--port " + str(p1)])
         else:
             window = subprocess.Popen(["soccerwindow2", "--port " + str(args.server_port)])
+    if args.auto_browser:
+        browser = subprocess.Popen(["firefox", os.uname()[1] + ":" + str(p)])
     if args.auto_ip:
         th = train(args, p1)
     else:
