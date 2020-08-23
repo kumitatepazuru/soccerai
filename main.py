@@ -1,11 +1,19 @@
 import os, signal
+import time
 from socket import socket, AF_INET, SOCK_DGRAM
+
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.optimizers import Adam
+from collections import deque
+from tensorflow.losses import huber_loss
+
+
 import args
 import shutil
 import subprocess
 import sys
 import threading
-
 import numpy as np
 
 import env_data
@@ -72,11 +80,55 @@ class Critic:
         print("V table:" + readable_size(sys.getsizeof(self.V)))
 
 
+# 経験メモリの定義
+class Memory:
+    # 初期化
+    def __init__(self, memory_size):
+        self.buffer = deque(maxlen=memory_size)
+
+    # 経験の追加
+    def add(self, experience):
+        self.buffer.append(experience)
+
+    # バッチサイズ分の経験をランダムに取得
+    def sample(self, batch_size):
+        idx = np.random.choice(np.arange(len(self.buffer)), size=batch_size, replace=False)
+        return [self.buffer[i] for i in idx]
+
+    # 経験メモリのサイズ
+    def __len__(self):
+        return len(self.buffer)
+
+
+# 行動価値関数の定義
+class QNetwork:
+    # 初期化
+    def __init__(self, state_size, action_size):
+        # モデルの作成
+        self.model = Sequential()
+        self.model.add(Dense(16, activation='relu', input_dim=state_size))
+        self.model.add(Dense(16, activation='relu'))
+        self.model.add(Dense(16, activation='relu'))
+        self.model.add(Dense(action_size, activation='linear'))
+
+        # モデルのコンパイル
+        self.model.compile(loss=huber_loss, optimizer=Adam(lr=0.001))
+
+
 class ActorCritic:
     def __init__(self, actor_class, critic_class):
         self.actor_class = actor_class
         self.critic_class = critic_class
         self.save = 0
+        # パラメータの準備
+        # 探索パラメータ
+        self.E_START = 1.0  # εの初期値
+        self.E_STOP = 0.01  # εの最終値
+        self.E_DECAY_RATE = 0.00005  # εの減衰率
+
+        # メモリパラメータ
+        self.MEMORY_SIZE = 10000  # 経験メモリのサイズ
+        self.BATCH_SIZE = 4  # バッチサイズ
 
     def train(self, name, env, data, logging, gamma, learning_rate, save_interval):
         # Actor Critic法の実装
@@ -105,6 +157,103 @@ class ActorCritic:
             s = n_state
             i += 1
 
+    def train2(self, name, env, data, logging, gamma, learning_rate, save_interval, logdir):
+        state_size = 4  # 行動数
+        action_size = len(env)  # 状態数
+
+        # main-networkの作成
+        main_qn = QNetwork(state_size, action_size)
+
+        # target-networkの作成
+        target_qn = QNetwork(state_size, action_size)
+
+        # 経験メモリの作成
+        memory = Memory(self.MEMORY_SIZE)
+
+        # 学習の開始
+
+        # 環境の初期化
+        state = env.reset(name)
+        state = np.reshape(state, [1, state_size])
+
+        # エピソード数分のエピソードを繰り返す
+        total_step = 0  # 総ステップ数
+        episode = 0
+        while True:
+            step = 0  # ステップ数
+
+            # target-networkの更新
+            target_qn.model.set_weights(main_qn.model.get_weights())
+            done = False
+            episode += 1
+
+            # 1エピソードのループ
+            while not done:
+                step += 1
+                total_step += 1
+
+                # εを減らす
+                epsilon = self.E_STOP + (self.E_START - self.E_STOP) * np.exp(-self.E_DECAY_RATE * total_step)
+
+                # ランダムな行動を選択
+                if epsilon > np.random.rand():
+                    action = env.random()
+                # 行動価値関数で行動を選択
+                else:
+                    action = np.argmax(main_qn.model.predict(state)[0])
+
+                # 行動に応じて状態と報酬を得る
+                next_state, done, reward = env.step(action)
+                next_state = np.reshape(next_state, [1, state_size])
+
+                # エピソード完了時
+                if done:
+                    # 次の状態に状態なしを代入
+                    next_state = np.zeros(state.shape)
+
+                    # 経験の追加
+                    memory.add((state, action, reward, next_state))
+                # エピソード完了でない時
+                else:
+
+                    # 経験の追加
+                    memory.add((state, action, reward, next_state))
+
+                    # 状態に次の状態を代入
+                    state = next_state
+
+                # 行動価値関数の更新
+                if len(memory) >= self.BATCH_SIZE:
+                    # ニューラルネットワークの入力と出力の準備
+                    inputs = np.zeros((self.BATCH_SIZE, 4))  # 入力(状態)
+                    targets = np.zeros((self.BATCH_SIZE, 6))  # 出力(行動ごとの価値)
+
+                    # バッチサイズ分の経験をランダムに取得
+                    minibatch = memory.sample(self.BATCH_SIZE)
+
+                    # ニューラルネットワークの入力と出力の生成
+                    for i, (state_b, action_b, reward_b, next_state_b) in enumerate(minibatch):
+
+                        # 入力に状態を指定
+                        inputs[i] = state_b
+
+                        # 採った行動の価値を計算
+                        if not (next_state_b == np.zeros(state_b.shape)).all(axis=1):
+                            target = reward_b + gamma * np.amax(
+                                target_qn.model.predict(next_state_b)[0])
+                        else:
+                            target = reward_b
+
+                        # 出力に行動ごとの価値を指定
+                        targets[i] = main_qn.model.predict(state_b)
+                        targets[i][action_b] = target  # 採った行動の価値
+
+                    # 行動価値関数の更新
+                    main_qn.model.fit(inputs, targets, epochs=1, verbose=0)
+
+            # エピソード完了時のログ表示
+            print('エピソード: {}, ステップ数: {}, epsilon: {:.4f}'.format(episode, step, epsilon))
+
 
 def train(arguments, ip=0):
     # スレッド化して実行
@@ -125,17 +274,27 @@ def train(arguments, ip=0):
                            arguments.max_goal_distance, arguments.min_goal_distance, arguments.goal_distance_interval,
                            arguments.max_goal_angle, arguments.min_goal_angle, arguments.goal_angle_interval,
                            num, arguments.noise, arguments.actions, arguments.goal_reset)
-        th1 = threading.Thread(target=trainer.train, args=[
+        # th1 = threading.Thread(target=trainer.train2, args=[
+        #     arguments.team_name_1,
+        #     env,
+        #     tmp,
+        #     arguments.logging,
+        #     arguments.gamma,
+        #     arguments.learning_rate,
+        #     arguments.save_interval,
+        #     arguments.logdir
+        # ])
+        # th1.setDaemon(True)
+        # th1.start()
+        trainer.train2(
             arguments.team_name_1,
             env,
             tmp,
             arguments.logging,
             arguments.gamma,
             arguments.learning_rate,
-            arguments.save_interval
-        ])
-        th1.setDaemon(True)
-        th1.start()
+            arguments.save_interval,
+            arguments.logdir)
 
     if not arguments.only_team_1:
         trainer = ActorCritic(Actor, Critic)
@@ -157,18 +316,18 @@ def train(arguments, ip=0):
                                arguments.goal_distance_interval,
                                arguments.max_goal_angle, arguments.min_goal_angle, arguments.goal_angle_interval,
                                num, arguments.noise, arguments.actions, arguments.goal_reset)
-            th2 = threading.Thread(target=trainer.train, args=[
+            th2 = threading.Thread(target=trainer.train2, args=[
                 arguments.team_name_2,
                 env,
                 tmp,
                 arguments.logging,
                 arguments.gamma,
                 arguments.learning_rate,
-                arguments.save_interval
+                arguments.save_interval,
+                arguments.logdir
             ])
             th2.setDaemon(True)
             th2.start()
-    return th1
 
 
 if __name__ == "__main__":
@@ -182,6 +341,14 @@ if __name__ == "__main__":
     s.close()
     tensorboard = subprocess.Popen(["tensorboard", "--logdir", "./" + args.logdir, "--port", str(p)])
     if args.auto_server:
+        cmd = ["rcssserver",
+               "server::game_logging=false", "server::text_logging=false", "server::nr_normal_halfs=1",
+               "server::use_offside=off",
+               "server::synch_mode=true", "server::free_kick_faults=false", "server::forbid_kick_off_offside=false",
+               "server::penalty_shoot_outs=false", "server::half_time=300", "server::nr_normal_halfs=9999",
+               "server::nr_extra_halfs=0", "server::stamina_capacity=-1", "server::drop_ball_time=200",
+               "server::auto_mode=true",
+               "server::connect_wait=25", "server::kick_off_wait=10", "server::game_over_wait=10"]
         if args.auto_ip:
             print("\033[38;5;12m[INFO]\t\033[38;5;13mSearching for available ports ...\033[0m")
             s = socket(AF_INET, SOCK_DGRAM)
@@ -196,30 +363,16 @@ if __name__ == "__main__":
             s.bind((args.host, 0))
             p3 = s.getsockname()[1]
             s.close()
-            print("\033[38;5;10m[OK] server port:", p1, p2, p3,"\033[0m")
+            print("\033[38;5;10m[OK] server port:", p1, p2, p3, "\033[0m")
 
             server = subprocess.Popen(
-                ["rcssserver",
-                 "server::game_logging=false", "server::text_logging=false", "server::nr_normal_halfs=1",
-                 "server::use_offside=off",
-                 "server::synch_mode=true", "server::free_kick_faults=false", "server::forbid_kick_off_offside=false",
-                 "server::penalty_shoot_outs=false", "server::half_time=-1",
-                 "server::stamina_capacity=-1",
-                 "server::drop_ball_time=500", "server::port=" + str(p1),
-                 "server::coach_port=" + str(p2), "server::olcoach_port=" + str(p3), "server::auto_mode=true",
-                 "server::connect_wait=25", "server::kick_off_wait=10", "server::game_over_wait=10"])
+                cmd + ["server::port=" + str(p1),
+                       "server::coach_port=" + str(p2), "server::olcoach_port=" + str(p3)])
         else:
             server = subprocess.Popen(
-                ["rcssserver", "server::max_goal_kicks=false"
-                               "server::game_logging=false", "server::text_logging=false", "server::nr_normal_halfs=1",
-                 "server::use_offside=off",
-                 "server::synch_mode=true", "server::free_kick_faults=false", "server::forbid_kick_off_offside=false",
-                 "server::penalty_shoot_outs=false", "server::half_time=-1",
-                 "server::stamina_capacity=-1",
-                 "server::drop_ball_time=500", "server::port=" + str(args.server_port),
-                 "server::coach_port=" + str(args.server_port + 1), "server::olcoach_port=" + str(args.server_port + 2),
-                 "server::auto_mode=true", "server::connect_wait=25", "server::kick_off_wait=10",
-                 "server::game_over_wait=10"])
+                cmd + ["server::port=" + str(args.server_port),
+                       "server::coach_port=" + str(args.server_port + 1),
+                       "server::olcoach_port=" + str(args.server_port + 2)])
 
     if args.auto_window:
         if args.auto_ip:
@@ -228,15 +381,14 @@ if __name__ == "__main__":
             window = subprocess.Popen(["soccerwindow2", "--port " + str(args.server_port)])
     if args.auto_browser:
         browser = subprocess.Popen(["firefox", os.uname()[1] + ":" + str(p)])
-    if args.auto_ip:
-        th = train(args, p1)
-    else:
-        th = train(args)
     if args.auto_server:
+        if args.auto_ip:
+            train(args, p1)
+        else:
+            train(args)
         try:
             server.wait()
         except KeyboardInterrupt:
-
             if args.auto_window:
                 os.killpg(os.getpgid(window.pid), signal.SIGQUIT)
             os.killpg(os.getpgid(tensorboard.pid), signal.SIGQUIT)
@@ -252,9 +404,11 @@ if __name__ == "__main__":
             os.killpg(os.getpgid(tensorboard.pid), signal.SIGQUIT)
             sys.exit()
     try:
-        th.join()
+        if args.auto_ip:
+            train(args, p1)
+        else:
+            train(args)
     except KeyboardInterrupt:
-
         if args.auto_window:
             os.killpg(os.getpgid(window.pid), signal.SIGQUIT)
         os.killpg(os.getpgid(tensorboard.pid), signal.SIGQUIT)

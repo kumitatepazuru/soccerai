@@ -10,7 +10,8 @@ def args():
     parser.add_argument("-f1", "--file1", help="Specify the trained data for team 1")
     parser.add_argument("-f2", "--file2", help="Specify the trained data for team 2")
     parser.add_argument("-o", "--only_team_1", help="Register one team only", action='store_true')
-    parser.add_argument("-i", "--auto_ip", help="Automatically assign IP addresses when using auto_server", action='store_true')
+    parser.add_argument("-i", "--auto_ip", help="Automatically assign IP addresses when using auto_server",
+                        action='store_true')
     parser.add_argument("--player_num_1", help="Set the number of players registered for Team 1",
                         default=1, type=int)
     parser.add_argument("--player_num_2", help="Set the number of players registered for Team 2",
@@ -38,7 +39,7 @@ def args():
     parser.add_argument("--recieve_log", help="Display the logs received from the server", action='store_true')
     parser.add_argument("--analysis_log", help="Display the log of messages received from the server "
                                                "(specify multiple messages in the filter)", nargs="*",
-                        default=("unknown", "init", "error"))
+                        default=("unknown", "init", "error", "hear"))
     parser.add_argument("--logdir", help="Specify the location of the tensorboard's log file (the data will be deleted "
                                          "if the specified location exists)", default="logdir")
     parser.add_argument("--max_ball_distance", help="Specifies the maximum distance of the ball that the AI can "
