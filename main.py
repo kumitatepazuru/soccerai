@@ -274,19 +274,7 @@ def train(arguments, ip=0):
                            arguments.max_goal_distance, arguments.min_goal_distance, arguments.goal_distance_interval,
                            arguments.max_goal_angle, arguments.min_goal_angle, arguments.goal_angle_interval,
                            num, arguments.noise, arguments.actions, arguments.goal_reset)
-        # th1 = threading.Thread(target=trainer.train2, args=[
-        #     arguments.team_name_1,
-        #     env,
-        #     tmp,
-        #     arguments.logging,
-        #     arguments.gamma,
-        #     arguments.learning_rate,
-        #     arguments.save_interval,
-        #     arguments.logdir
-        # ])
-        # th1.setDaemon(True)
-        # th1.start()
-        trainer.train2(
+        th1 = threading.Thread(target=trainer.train2, args=[
             arguments.team_name_1,
             env,
             tmp,
@@ -294,7 +282,10 @@ def train(arguments, ip=0):
             arguments.gamma,
             arguments.learning_rate,
             arguments.save_interval,
-            arguments.logdir)
+            arguments.logdir
+        ])
+        th1.setDaemon(True)
+        th1.start()
 
     if not arguments.only_team_1:
         trainer = ActorCritic(Actor, Critic)
@@ -328,6 +319,7 @@ def train(arguments, ip=0):
             ])
             th2.setDaemon(True)
             th2.start()
+    return th1
 
 
 if __name__ == "__main__":
@@ -381,11 +373,11 @@ if __name__ == "__main__":
             window = subprocess.Popen(["soccerwindow2", "--port " + str(args.server_port)])
     if args.auto_browser:
         browser = subprocess.Popen(["firefox", os.uname()[1] + ":" + str(p)])
+    if args.auto_ip:
+        th = train(args, p1)
+    else:
+        th = train(args)
     if args.auto_server:
-        if args.auto_ip:
-            train(args, p1)
-        else:
-            train(args)
         try:
             server.wait()
         except KeyboardInterrupt:
@@ -404,10 +396,7 @@ if __name__ == "__main__":
             os.killpg(os.getpgid(tensorboard.pid), signal.SIGQUIT)
             sys.exit()
     try:
-        if args.auto_ip:
-            train(args, p1)
-        else:
-            train(args)
+        th.join()
     except KeyboardInterrupt:
         if args.auto_window:
             os.killpg(os.getpgid(window.pid), signal.SIGQUIT)
